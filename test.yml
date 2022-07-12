@@ -1,0 +1,9 @@
+---
+- name: OS update
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Linux patching
+      include_role: 
+        name: linux_patch
+        

@@ -1,0 +1,6 @@
+---
+# vars file for linux_patch
+supported_distros:
+  - CentOS
+
+ip_address: "{{ ansible_default_ipv4.address }}"
