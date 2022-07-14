@@ -1,0 +1,10 @@
+- name: creating yum list for the host
+  ansible.builtin.yum:
+    list: updates
+  register: yum_updates
+
+- name: writing yum list to localhost
+  copy:
+      dest: "/tmp/{{ inventory_hostname }}"
+      content: "{{ yum_updates }}" 
+  delegate_to: localhost
