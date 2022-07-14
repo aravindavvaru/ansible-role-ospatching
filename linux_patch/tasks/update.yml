@@ -1,10 +1,134 @@
-- name: creating yum list for the host
-  ansible.builtin.yum:
-    list: updates
-  register: yum_updates
+- block:
+  - name: "Check if not a Centos server"
+    lineinfile:
+      line: "HOSTNAME: {{ inventory_hostname }} | Not a Centos server"
+      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.FAILED.{{ timestamp }}"
+      create: yes
+    when: ansible_distribution not in supported_distros
+    delegate_to: localhost
 
-- name: writing yum list to localhost
-  copy:
-      dest: "/tmp/{{ inventory_hostname }}"
-      content: "{{ yum_updates }}" 
+  - name: "Fail host if is not Centos "
+    fail:
+      msg: "HOSTNAME: {{ inventory_hostname }} | Not a Centos server"
+    when: ansible_distribution not in supported_distros
+
+- name: set pre update os_info
+  set_fact:
+    os_info_pre_update:
+      distribution: "{{ ansible_distribution }}"
+      distribution_major_version: "{{ ansible_distribution_major_version }}"
+      distribution_release: "{{ ansible_distribution_release }}"
+      distribution_version: "{{ ansible_distribution_version }}"
+
+- name: "current OS version information before the update"
+  blockinfile:
+    block:  |
+      "HOSTNAME: {{ inventory_hostname }} version before the update:"
+      "      distribution: {{ os_info_pre_update.distribution  }} "
+      "      distribution_major_version: {{ os_info_pre_update.distribution_major_version }}"
+      "      distribution_release: {{ os_info_pre_update.distribution_release }}"
+      "      distribution_version: {{ os_info_pre_update.distribution_version }}"
+    dest: "{{ local_dir }}/update.{{ inventory_hostname }}.OK"
+    create: yes
+    marker: " "
   delegate_to: localhost
+
+
+- name: "Return service state information"
+  service_facts:
+
+- name: " Collect a list of the mounted device "
+  set_fact:
+    dvs: "{{ ansible_mounts | map(attribute='device') | list }}"
+
+- name: "Register all the system interface "
+  debug:
+    msg: "{{ item }}"
+  loop: "{{ ansible_interfaces }}"
+  when:
+    - hostvars[inventory_hostname]['ansible_%s' | format(item)]['ipv4'] is defined
+    - hostvars[inventory_hostname]['ansible_%s' | format(item)]['active'] == true
+    - hostvars[inventory_hostname]['ansible_%s' | format(item)]['device'] != 'lo'
+  register: NIC_interface
+
+- name: "get the IP address for each interface" 
+  debug:   
+    msg: "{{ hostvars[inventory_hostname]['ansible_%s' | format(item.item)]['ipv4']['address'] }}"
+  loop: "{{ NIC_interface['results'] }}"
+  when: item.skip_reason is not defined
+  register: NIC_IP
+
+
+- name: " Check SELinux Status before the patching "
+  set_fact:
+    selinux_status: "{{ ansible_selinux['mode'] }}"
+
+
+
+
+- name: "Install Latest yum packages"
+  become: yes
+  become_method: sudo
+  yum:
+    name: "*"
+    state: latest
+    update_cache: yes
+    #exclude: httpd*, php* 
+  when: ansible_distribution in supported_distros
+  register: yum_result
+
+
+- block:
+  - name: "Log if yum update failed"
+    lineinfile:
+      line: "HOSTNAME: {{ inventory_hostname }} | yum update failed, PLEASE CHECK THE SERVER"
+      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.yum"
+      create: yes
+    delegate_to: localhost
+  - name: "Yum failed"
+    debug:
+      msg: "HOSTNAME: {{ inventory_hostname }} | yum update failed, PLEASE CHECK THE SERVER"
+  when: yum_result is defined and yum_result is failed
+
+- block:
+  - name: "Log if nothing to update"
+    lineinfile:
+      line: "HOSTNAME: {{ inventory_hostname }} |  Nothing to update."
+      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.yum"
+      create: yes
+    delegate_to: localhost
+  - name: "nothing to update"
+    debug:
+      msg: "HOSTNAME: {{ inventory_hostname }} |  Nothing to update."
+  when: yum_result is defined and yum_result is succeeded and not yum_result.changed
+
+- block:
+  - name: "Log if yum update success"
+    lineinfile:
+      line: "HOSTNAME: {{ inventory_hostname }} | yum update succeeded."
+      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.yum"
+      create: yes
+    delegate_to: localhost
+  - name: "Update is done "
+    debug:
+      msg: "HOSTNAME: {{ inventory_hostname }} | yum update succeeded."
+  when: yum_result is defined and yum_result is succeeded and yum_result.changed
+
+
+- name: "Comparing last kernel and running kernel"
+  shell:  rpm -q --last kernel  | head -1 | awk '{ print $1}' | sed 's/kernel-//g'
+  args:
+    warn: false
+  register: LAST_KERNEL
+
+- name: "Reboot the system if kernel updates"
+  become: yes
+  become_method: sudo
+  reboot:
+    msg:  "Reboot initiated by Ansible after system update"
+  when: ansible_kernel != LAST_KERNEL.stdout
+
+
+- name: Print all available facts
+  ansible.builtin.debug:
+    var: ansible_facts

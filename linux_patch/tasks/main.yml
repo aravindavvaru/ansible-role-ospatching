@@ -5,6 +5,11 @@
     msg: "Patching_type: {{ Patching_type }}"
 
 
-- name: patch_with_reboot
-  import_tasks: patch_with_reboot.yml
-  when: Patching_type == "KERNEL"
+- name: creating report with package list
+  import_tasks: report.yml
+  when: Patching_type == "report"
+
+
+- name: creating report with package list
+  import_tasks: update.yml
+  when: Patching_type == "update"
