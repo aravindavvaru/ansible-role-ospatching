@@ -1,7 +1,7 @@
 - name: creating dupilicate yum list for the host
   ansible.builtin.shell: yum list updates >/tmp/yum_updates
 
-- name: Specifying a path directly
+- name: copying yum update file to local ansible host
   ansible.builtin.fetch:
     src: /tmp/yum_updates
     dest: /tmp/{{ inventory_hostname }}
