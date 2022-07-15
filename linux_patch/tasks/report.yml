@@ -1,8 +1,14 @@
+- name: "creating report time"
+  set_fact:
+    timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+  delegate_to: localhost
+  run_once: true
+
 - name: creating dupilicate yum list for the host
-  ansible.builtin.shell: yum list updates >/tmp/yum_updates
+  ansible.builtin.shell: yum list updates | awk '/Updated Packages/{p=1}p' >/tmp/yum_updates_{{ timestamp }}
 
 - name: copying yum update file to local ansible host
   ansible.builtin.fetch:
-    src: /tmp/yum_updates
+    src: /tmp/yum_updates_{{ timestamp }}
     dest: /tmp/{{ inventory_hostname }}
     flat: yes
