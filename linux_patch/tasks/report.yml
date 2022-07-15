@@ -1,10 +1,8 @@
-- name: creating yum list for the host
-  ansible.builtin.yum:
-    list: updates
-  register: yum_updates
+- name: creating dupilicate yum list for the host
+  ansible.builtin.shell: yum list updates >/tmp/yum_updates
 
-- name: writing yum list to localhost
-  copy:
-      dest: "/tmp/{{ inventory_hostname }}"
-      content: "{{ yum_updates }}" 
-  delegate_to: localhost
+- name: Specifying a path directly
+  ansible.builtin.fetch:
+    src: /tmp/yum_updates
+    dest: /tmp/{{ inventory_hostname }}
+    flat: yes
