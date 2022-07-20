@@ -1,5 +1,9 @@
 ---
 # defaults file for linux_patch
-Patching_type:  KERNEL
+Patching_type:  report
 
-local_dir: "/tmp/ansible/sys-patching"
+local_dir: "/tmp/patching"
+
+supported_distros:
+  - RedHat
+  - Centos

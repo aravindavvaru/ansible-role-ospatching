@@ -13,7 +13,7 @@
   - name: "Check if not a RHEL or Centos server"
     lineinfile:
       line: "HOSTNAME: {{ inventory_hostname }} | Not a RHEL or Centos server"
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.FAILED.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.FAILED.{{ timestamp }}"
       create: yes
     when: ansible_distribution not in supported_distros
     delegate_to: localhost
@@ -36,7 +36,7 @@
   - name: "Log the systems without a valid subscription"
     lineinfile:
       line: "DEBUG|HOSTNAME: {{ inventory_hostname }} | The system does not have a valid subscription"
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.FAILED.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.FAILED.{{ timestamp }}"
       create: yes
     delegate_to: localhost
   - name: "Please check the RH subscription first"
@@ -65,7 +65,7 @@
       "      distribution_major_version: {{ os_info_pre_update.distribution_major_version }}"
       "      distribution_release: {{ os_info_pre_update.distribution_release }}"
       "      distribution_version: {{ os_info_pre_update.distribution_version }}"
-    dest: "{{ local_dir }}/update.{{ inventory_hostname }}.OK.{{ timestamp }}"
+    dest: "{{ local_dir }}/{{ inventory_hostname }}.BeforeUpdate.{{ timestamp }}"
     create: yes
     marker: " "
   delegate_to: localhost
@@ -111,6 +111,7 @@
 #           Update the system       #
 #####################################
 - name: "Install Latest yum packages"
+  become: yes
   yum:
     name: "*"
     state: latest
@@ -121,7 +122,7 @@
   - name: "Log if yum update failed"
     lineinfile:
       line: "HOSTNAME: {{ inventory_hostname }} | yum update failed, PLEASE CHECK THE SERVER"
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.yum.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.yum_update.{{ timestamp }}"
       create: yes
     delegate_to: localhost
   - name: "Yum failed"
@@ -133,7 +134,7 @@
   - name: "Log if nothing to update"
     lineinfile:
       line: "HOSTNAME: {{ inventory_hostname }} |  Nothing to update."
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.yum.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.yum_update.{{ timestamp }}"
       create: yes
     delegate_to: localhost
   - name: "nothing to update"
@@ -145,14 +146,25 @@
   - name: "Log if yum update success"
     lineinfile:
       line: "HOSTNAME: {{ inventory_hostname }} | yum update succeeded."
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.yum.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.yum_update.{{ timestamp }}"
       create: yes
     delegate_to: localhost
+
   - name: "Update is done "
     debug:
       msg: "HOSTNAME: {{ inventory_hostname }} | yum update succeeded."
   when: yum_result is defined and yum_result is succeeded and yum_result.changed
 
+
+- name: "Push Last yum updated package list"
+  become: yes
+  shell: yum history info > /tmp/yum_lastupdate.{{ timestamp }}
+
+- name: copying last yum update file to local ansible host
+  ansible.builtin.fetch:
+    src: /tmp/yum_lastupdate.{{ timestamp }}
+    dest: "{{ local_dir }}/{{ inventory_hostname }}.yum_update.{{ timestamp }}"
+    flat: yes
 
 - name: "Comparing last kernel and running kernel"
   shell:  rpm -q --last kernel  | head -1 | awk '{ print $1}' | sed 's/kernel-//g'
@@ -186,7 +198,7 @@
   - name: "Creating a report when starting the services successfully done"
     lineinfile:
       line: "HOSTNAME: {{ inventory_hostname }} | {{ item }} : OK "
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.OK.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
       create: yes
     delegate_to: localhost
     when: ansible_facts.services[item]['state'] == "running" and start_failed is not failed
@@ -199,7 +211,7 @@
     - name: send Error msg if sarting service failed
       lineinfile:
         line: "HOSTNAME: {{ inventory_hostname }} | {{ item.item }} : KO Please check it"
-        dest: "{{ local_dir }}/update.{{ inventory_hostname }}.FAILED.{{ timestamp }}"
+        dest: "{{ local_dir }}/{{ inventory_hostname }}.FAILED.{{ timestamp }}"
         create: yes
       delegate_to: localhost
       when:
@@ -223,7 +235,7 @@
   - name: "Creating a report when all the FSs are mounted successfully"
     lineinfile:
       line: "HOSTNAME: {{ inventory_hostname }} | {{ item.stdout }} : MOUNTED "
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.OK.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
       create: yes
     delegate_to: localhost
     when: item.rc == 0
@@ -237,7 +249,7 @@
     - name: "send Error msg if mounting failed"
       lineinfile:
         line: "HOSTNAME: {{ inventory_hostname }} | {{ item.item }} : ****NOT MOUNTED***** "
-        dest: "{{ local_dir }}/update.{{ inventory_hostname }}.FAILED.{{ timestamp }}"
+        dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
         create: yes
       delegate_to: localhost
       when: item.rc != 0
@@ -261,7 +273,7 @@
   - name: "Creating a report when the interfaces are active"
     lineinfile:
       line: "HOSTNAME: {{ inventory_hostname }} | interface {{ item.item }} : OK  "
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.OK.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
       create: yes
     delegate_to: localhost
     loop: "{{ NIC_interface['results'] }}"
@@ -271,7 +283,7 @@
     - name: " Send error msg if one or more interface are not active"
       lineinfile:
         line: "HOSTNAME: {{ inventory_hostname }} | interface {{ item.item }} : ****NOT ACTIVE**** "
-        dest: "{{ local_dir }}/update.{{ inventory_hostname }}.FAILED.{{ timestamp }}"
+        dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
         create: yes
       delegate_to:  localhost
 
@@ -284,7 +296,7 @@
   - name: "Creating a report when the interface IP is OK"
     lineinfile:
       line: "HOSTNAME: {{ inventory_hostname }} | interface {{ item.item.item }} : {{ item.msg }} : OK  "
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.OK.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
       create: yes
     delegate_to:  localhost
     loop: "{{ NIC_IP['results'] }}"
@@ -294,7 +306,7 @@
     - name: "Send error msg if IP address has changed"
       lineinfile:
         line: "HOSTNAME: {{ inventory_hostname }} | interface {{ item.item.item }} :  PLEASE CHECK THE IP ADDRESS"
-        dest: "{{ local_dir }}/update.{{ inventory_hostname }}.FAILED.{{ timestamp }}"
+        dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
         create: yes
       delegate_to: localhost
 ####################################################################
@@ -309,7 +321,7 @@
   - name: "Creating a report when the SELinux is OK"
     lineinfile:
       line: "HOSTNAME: {{ inventory_hostname }} | SELinux: OK"
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.OK.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
       create: yes
     delegate_to: localhost
 
@@ -317,7 +329,7 @@
     - name: "Send error msg if SELinux status changed"
       lineinfile:
         line: "HOSTNAME: {{ inventory_hostname }} | ***SELinux status changed***"
-        dest: "{{ local_dir }}/update.{{ inventory_hostname }}.FAILED.{{ timestamp }}"
+        dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
         create: yes
       delegate_to: localhost
 
@@ -339,7 +351,7 @@
         "      distribution_major_version: {{ os_info_post_update.distribution_major_version }}"
         "      distribution_release: {{ os_info_post_update.distribution_release }}"
         "      distribution_version: {{ os_info_post_update.distribution_version }}"
-      dest: "{{ local_dir }}/update.{{ inventory_hostname }}.OK.{{ timestamp }}"
+      dest: "{{ local_dir }}/{{ inventory_hostname }}.BeforeUpdate.{{ timestamp }}"
       create: yes
   delegate_to: localhost
 
@@ -351,15 +363,14 @@
     final_report: "{{ local_dir }}/update.summary.{{ timestamp }}"
 
 - name: " Merge all host report files. in {{ local_dir }}/update.summary.{{ timestamp }}"
-  shell: "cat {{ item }} >> {{ local_dir }}/update.summary.{{ timestamp }}"
+  shell: "cat {{ item }} >> {{ local_dir }}/summaryreport_{{ inventory_hostname }}.{{ timestamp }}"
   when: item != final_report
- # loop: "{{ query('fileglob', '{{ local_dir }}/update.{{ inventory_hostname }}*{{ timestamp }}') }}"
-  loop: "{{ query('fileglob', '{{ local_dir }}/update.*{{ timestamp }}') }}"
+  loop: "{{ query('fileglob', '{{ local_dir }}/*{{ timestamp }}') }}"
   delegate_to: localhost
   run_once: true
 
-- name: " Read the file {{ local_dir }}/update.summary.{{ timestamp }}"
-  shell:  "cat  {{ local_dir }}/update.summary.{{ timestamp }}"
+- name: " Read the file {{ local_dir }}/summaryreport_{{ inventory_hostname }}.{{ timestamp }}"
+  shell:  "cat  {{ local_dir }}/summaryreport_{{ inventory_hostname }}.{{ timestamp }}"
   delegate_to: localhost
   register: final_report
   run_once: true
