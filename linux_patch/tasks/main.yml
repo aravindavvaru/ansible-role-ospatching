@@ -13,3 +13,8 @@
 - name: creating report with package list
   import_tasks: update.yml
   when: Patching_type == "update"
+
+
+- name: creating report with package list
+  import_tasks: rollback.yml
+  when: Patching_type == "rollback"

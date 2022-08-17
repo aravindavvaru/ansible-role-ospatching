@@ -2,6 +2,10 @@
 - name: OS update
   hosts: all
   gather_facts: yes
+  vars_prompt:
+    - name: Patching_type
+      prompt: Patching type (report/update/rollback)
+      private: no
   tasks:
     - name: Linux patching
       include_role: 

@@ -1,9 +1,11 @@
 ---
 # defaults file for linux_patch
-Patching_type:  report
+Patching_type: report
 
 local_dir: "/tmp/patching"
 
 supported_distros:
   - RedHat
   - Centos
+
+

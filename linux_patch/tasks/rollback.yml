@@ -1,0 +1,6 @@
+---
+
+- name: rollback to the last known state
+  become: yes
+  shell: yum -y history rollback last-2
+
