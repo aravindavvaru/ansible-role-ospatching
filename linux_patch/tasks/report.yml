@@ -4,6 +4,16 @@
   delegate_to: localhost
   run_once: true
 
+- name: "Check the Redhat subscription status is valid"
+  shell:  subscription-manager status |  grep "Status:" | awk '{print $NF}'
+  changed_when: false
+  when: ansible_distribution == "RedHat"
+  register: subscription_status
+
+- name: "Please check the RH subscription first"
+  shell: 
+  when: ansible_distribution == "RedHat" and subscription_status.stdout != "Current"
+
 - name: creating dupilicate yum list for the host
   ansible.builtin.shell: yum list updates | awk '/Updated Packages/{p=1}p' >/tmp/yum_updates_{{ timestamp }}
 

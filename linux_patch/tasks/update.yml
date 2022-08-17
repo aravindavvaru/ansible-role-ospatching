@@ -23,27 +23,6 @@
       msg: "HOSTNAME: {{ inventory_hostname }} | Not a RHEL or Centos server"
     when: ansible_distribution not in supported_distros
 
-#############################################################
-#          Check if Redhat sunscription is Valid            #
-#############################################################
-- name: "Check the Redhat subscription status is valid"
-  shell:  subscription-manager status |  grep "Status:" | awk '{print $NF}'
-  changed_when: false
-  when: ansible_distribution == "RedHat"
-  register: echo_results
-
-- block:
-  - name: "Log the systems without a valid subscription"
-    lineinfile:
-      line: "DEBUG|HOSTNAME: {{ inventory_hostname }} | The system does not have a valid subscription"
-      dest: "{{ local_dir }}/{{ inventory_hostname }}.FAILED.{{ timestamp }}"
-      create: yes
-    delegate_to: localhost
-  - name: "Please check the RH subscription first"
-    fail:
-      msg:  "The system is not Subscribed"
-  when: ansible_distribution == "RedHat" and echo_results.stdout != "Current"
-
 #########################################################
 #                    Pre-update Check                   #
 #########################################################
@@ -96,9 +75,9 @@
   when: item.skip_reason is not defined
   register: NIC_IP
 ###########################################################
-- name: " Check SELinux Status before the patching "
-  set_fact:
-    selinux_status: "{{ ansible_selinux['mode'] }}"
+# - name: " Check SELinux Status before the patching "
+#   set_fact:
+#     selinux_status: "{{ ansible_selinux['mode'] }}"
 ############################################################################################
 # yum_update                                                                               # 
 # Description: Perform yum update on selected hosts and compare running kernel version     #
@@ -166,16 +145,16 @@
     dest: "{{ local_dir }}/{{ inventory_hostname }}.yum_update.{{ timestamp }}"
     flat: yes
 
-- name: "Comparing last kernel and running kernel"
-  shell:  rpm -q --last kernel  | head -1 | awk '{ print $1}' | sed 's/kernel-//g'
-  args:
-    warn: false
-  register: LAST_KERNEL
+# - name: "Comparing last kernel and running kernel"
+#   shell:  rpm -q --last kernel  | head -1 | awk '{ print $1}' | sed 's/kernel-//g'
+#   args:
+#     warn: false
+#   register: LAST_KERNEL
 
-- name: "Reboot the system if kernel updates"
-  reboot:
-    msg:  "Reboot initiated by Ansible after system update"
-  when: ansible_kernel != LAST_KERNEL.stdout
+# - name: "Reboot the system if kernel updates"
+#   reboot:
+#     msg:  "Reboot initiated by Ansible after system update"
+#   when: ansible_kernel != LAST_KERNEL.stdout
 
 ############################################################   
 #                     Post-Update Check                    #
@@ -313,25 +292,25 @@
 #     Make sure SELinux status does not changed after reboot       #
 #     ######################################################       #
 
-- block:
-  - name: " Assert that the SElinux status is OK "
-    assert:
-      that: ansible_selinux['mode'] == selinux_status
+# - block:
+#   - name: " Assert that the SElinux status is OK "
+#     assert:
+#       that: ansible_selinux['mode'] == selinux_status
 
-  - name: "Creating a report when the SELinux is OK"
-    lineinfile:
-      line: "HOSTNAME: {{ inventory_hostname }} | SELinux: OK"
-      dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
-      create: yes
-    delegate_to: localhost
+#   - name: "Creating a report when the SELinux is OK"
+#     lineinfile:
+#       line: "HOSTNAME: {{ inventory_hostname }} | SELinux: OK"
+#       dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
+#       create: yes
+#     delegate_to: localhost
 
-  rescue:
-    - name: "Send error msg if SELinux status changed"
-      lineinfile:
-        line: "HOSTNAME: {{ inventory_hostname }} | ***SELinux status changed***"
-        dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
-        create: yes
-      delegate_to: localhost
+#   rescue:
+#     - name: "Send error msg if SELinux status changed"
+#       lineinfile:
+#         line: "HOSTNAME: {{ inventory_hostname }} | ***SELinux status changed***"
+#         dest: "{{ local_dir }}/{{ inventory_hostname }}.AfterUpdate.{{ timestamp }}"
+#         create: yes
+#       delegate_to: localhost
 
 #####################################################################
 - name: "Set post update os info"
